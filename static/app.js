@@ -13,6 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let senderLocked = false;
     let countdownTimer = null;
     let availableProviders = [];  // populated from /api/config
+    let activeProviderId = "";
+    let opsTimer = null;
     let historyJobs = [];
     let scheduledJobs = [];
     let currentScheduledJob = null;
@@ -80,8 +82,17 @@ document.addEventListener("DOMContentLoaded", () => {
         // History
         historyTbody:   $("history-tbody"),
         btnRefreshHistory:$("btn-refresh-history"),
+        historyInsights: $("history-insights"),
+        historySearch:  $("history-search"),
+        historyStatusFilter: $("history-status-filter"),
+        historyKindFilter: $("history-kind-filter"),
         providerLabel:  $("provider-label"),
+        providerSwitcher: $("provider-switcher"),
         btnRefreshOperations: $("btn-refresh-operations"),
+        opsAutorefresh: $("ops-autorefresh"),
+        opsLiveDot:     $("ops-live-dot"),
+        opsEventFilter: $("ops-event-filter"),
+        opsEventCount:  $("ops-event-count"),
         opsSourceNote:  $("ops-source-note"),
         opsActiveProvider: $("ops-active-provider"),
         opsResolvedSender: $("ops-resolved-sender"),
@@ -220,6 +231,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // History
         el.btnRefreshHistory?.addEventListener("click", loadHistory);
         el.btnRefreshOperations?.addEventListener("click", loadOperations);
+        el.historySearch?.addEventListener("input", renderHistory);
+        el.historyStatusFilter?.addEventListener("change", renderHistory);
+        el.historyKindFilter?.addEventListener("change", renderHistory);
+        el.opsAutorefresh?.addEventListener("change", toggleOpsAutorefresh);
+        el.opsEventFilter?.addEventListener("change", renderOperations);
 
         // Scheduled
         el.btnRefreshScheduled?.addEventListener("click", loadScheduled);
@@ -787,39 +803,102 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await api("GET", "/api/jobs?limit=0");
             if (!res.success || !res.jobs) return;
             historyJobs = res.jobs;
-
-            if (res.jobs.length === 0) {
-                el.historyTbody.innerHTML = `<tr><td colspan="9" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-inbox text-2xl mb-2 block"></i>No delivery history yet.</td></tr>`;
-                return;
-            }
-
-            el.historyTbody.innerHTML = res.jobs.map(j => {
-                const date = j.created_at ? new Date(j.created_at * 1000).toLocaleString() : "—";
-                const badge = statusBadge(j.status);
-                const subj = esc((j.subject_template || "").substring(0, 40));
-                const kind = j.kind === "single"
-                    ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-600/20 text-blue-300 border border-blue-600/30 ml-2">Single</span>'
-                    : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-ghost-600/20 text-ghost-300 border border-ghost-600/30 ml-2">Campaign</span>';
-                return `<tr class="hover:bg-surface-3/30 transition-colors">
-                    <td class="px-4 py-3 font-mono text-xs text-ghost-300">${esc(j.id)}</td>
-                    <td class="px-4 py-3 text-xs">${esc(j.provider)} ${kind}</td>
-                    <td class="px-4 py-3 text-sm truncate max-w-[160px]" title="${esc(j.subject_template || "")}">${subj}</td>
-                    <td class="px-4 py-3 text-center">${j.total}</td>
-                    <td class="px-4 py-3 text-center text-green-400">${j.success_count}</td>
-                    <td class="px-4 py-3 text-center text-red-400">${j.failed_count}</td>
-                    <td class="px-4 py-3 text-center">${badge}</td>
-                    <td class="px-4 py-3 text-xs text-gray-400">${date}</td>
-                    <td class="px-4 py-3 text-center">
-                        <button onclick="openHistoryModal('${j.id}')" class="text-ghost-400 hover:text-ghost-300 transition-colors mr-3" title="View details">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button onclick="deleteJob('${j.id}')" class="text-gray-500 hover:text-red-400 transition-colors" title="Delete">
-                            <i class="fas fa-trash-can"></i>
-                        </button>
-                    </td>
-                </tr>`;
-            }).join("");
+            renderHistoryInsights(historyJobs);
+            renderHistory();
         } catch (e) { console.error("History load error:", e); }
+    }
+
+    function renderHistoryInsights(jobs) {
+        if (!el.historyInsights) return;
+        const sent = jobs.reduce((a, j) => a + (j.success_count || 0), 0);
+        const failed = jobs.reduce((a, j) => a + (j.failed_count || 0), 0);
+        const processed = sent + failed;
+        const rate = processed ? Math.round((sent / processed) * 100) : null;
+        const running = jobs.filter(j => ["running", "paused"].includes(j.status)).length;
+        const campaigns = jobs.filter(j => j.kind !== "single").length;
+        const rateColor = rate === null ? "text-gray-400" : rate >= 98 ? "text-green-400" : rate >= 90 ? "text-yellow-400" : "text-red-400";
+        const cards = [
+            { value: sent.toLocaleString(), label: "Emails Delivered", sub: `${processed.toLocaleString()} attempted`, icon: "paper-plane", color: "text-green-400" },
+            { value: rate === null ? "—" : `${rate}%`, label: "Success Rate", sub: rate === null ? "No deliveries yet" : `${failed.toLocaleString()} failed`, icon: "bullseye", color: rateColor },
+            { value: jobs.length.toLocaleString(), label: "Total Jobs", sub: `${campaigns} campaign(s)`, icon: "layer-group", color: "text-ghost-300" },
+            { value: running.toLocaleString(), label: "Active Now", sub: running ? "Running or paused" : "All settled", icon: "bolt", color: running ? "text-blue-400" : "text-gray-400" },
+        ];
+        el.historyInsights.innerHTML = cards.map(c => `
+            <div class="kpi-card">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <div class="kpi-value ${c.color}">${c.value}</div>
+                        <div class="kpi-label">${c.label}</div>
+                        <div class="kpi-sub">${c.sub}</div>
+                    </div>
+                    <i class="fas fa-${c.icon} ${c.color} opacity-60 mt-1"></i>
+                </div>
+            </div>`).join("");
+    }
+
+    function historyMatchesFilters(j) {
+        const q = (el.historySearch?.value || "").trim().toLowerCase();
+        const status = el.historyStatusFilter?.value || "all";
+        const kind = el.historyKindFilter?.value || "all";
+        if (status !== "all" && j.status !== status) return false;
+        if (kind !== "all" && (j.kind || "campaign") !== kind) return false;
+        if (q) {
+            const hay = `${j.id} ${j.subject_template || ""} ${j.provider || ""} ${j.from_email || ""} ${j.from_name || ""}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    }
+
+    function renderHistory() {
+        if (!el.historyTbody) return;
+        const jobs = (historyJobs || []).filter(historyMatchesFilters);
+
+        if (!jobs.length) {
+            const filtered = (historyJobs || []).length > 0;
+            el.historyTbody.innerHTML = `<tr><td colspan="11" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-${filtered ? "filter-circle-xmark" : "inbox"} text-2xl mb-2 block"></i>${filtered ? "No jobs match the current filters." : "No delivery history yet."}</td></tr>`;
+            return;
+        }
+
+        el.historyTbody.innerHTML = jobs.map(j => {
+            const date = j.created_at ? new Date(j.created_at * 1000).toLocaleString() : "—";
+            const badge = statusBadge(j.status);
+            const subj = esc((j.subject_template || "").substring(0, 40));
+            const kind = j.kind === "single"
+                ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-600/20 text-blue-300 border border-blue-600/30 ml-2">Single</span>'
+                : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-ghost-600/20 text-ghost-300 border border-ghost-600/30 ml-2">Campaign</span>';
+            const processed = (j.success_count || 0) + (j.failed_count || 0);
+            const rate = processed ? (j.success_count || 0) / processed : null;
+            const ratePct = rate === null ? 0 : Math.round(rate * 100);
+            const rateColor = rate === null ? "#4b5563" : ratePct >= 98 ? "#34d399" : ratePct >= 90 ? "#fbbf24" : "#f87171";
+            const durSecs = j.completed_at && j.created_at ? j.completed_at - j.created_at : null;
+            const duration = durSecs !== null ? fmtDuration(durSecs) : (["running", "paused"].includes(j.status) ? "…" : "—");
+            const throughput = durSecs && processed ? `${(processed / (durSecs / 60)).toFixed(1)}/min` : "";
+            return `<tr class="hover:bg-surface-3/30 transition-colors">
+                <td class="px-4 py-3 font-mono text-xs text-ghost-300">${esc(j.id)}</td>
+                <td class="px-4 py-3 text-xs">${esc(j.provider)} ${kind}</td>
+                <td class="px-4 py-3 text-sm truncate max-w-[160px]" title="${esc(j.subject_template || "")}">${subj}</td>
+                <td class="px-4 py-3 text-center">${j.total}</td>
+                <td class="px-4 py-3 text-center text-green-400">${j.success_count}</td>
+                <td class="px-4 py-3 text-center text-red-400">${j.failed_count}</td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2" title="${rate === null ? "No sends recorded" : `${ratePct}% success${throughput ? ` · ${throughput}` : ""}`}">
+                        <div class="rate-bar"><span style="width:${ratePct}%;background:${rateColor}"></span></div>
+                        <span class="text-xs text-gray-400">${rate === null ? "—" : `${ratePct}%`}</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-center">${badge}</td>
+                <td class="px-4 py-3 text-xs text-gray-400" title="${throughput}">${duration}</td>
+                <td class="px-4 py-3 text-xs text-gray-400">${date}</td>
+                <td class="px-4 py-3 text-center">
+                    <button onclick="openHistoryModal('${j.id}')" class="text-ghost-400 hover:text-ghost-300 transition-colors mr-3" title="View details">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button onclick="deleteJob('${j.id}')" class="text-gray-500 hover:text-red-400 transition-colors" title="Delete">
+                        <i class="fas fa-trash-can"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join("");
     }
 
     async function loadOperations() {
@@ -830,6 +909,18 @@ document.addEventListener("DOMContentLoaded", () => {
             renderOperations();
         } catch (e) {
             console.error("Operations load error:", e);
+        }
+    }
+
+    function toggleOpsAutorefresh() {
+        const on = !!el.opsAutorefresh?.checked;
+        el.opsLiveDot?.classList.toggle("hidden", !on);
+        if (opsTimer) { clearInterval(opsTimer); opsTimer = null; }
+        if (on) {
+            loadOperations();
+            opsTimer = setInterval(() => {
+                if (!$("panel-operations")?.classList.contains("hidden")) loadOperations();
+            }, 5000);
         }
     }
 
@@ -923,29 +1014,28 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (el.opsRecentEvents) {
-            const events = ops.recent_events || [];
+            const filter = el.opsEventFilter?.value || "all";
+            const allEvents = ops.recent_events || [];
+            const events = allEvents.filter((event) => {
+                const lvl = (event.level || "INFO").toUpperCase();
+                if (filter === "all") return true;
+                if (filter === "error") return lvl === "ERROR" || lvl === "CRITICAL";
+                return lvl === filter;
+            });
+            if (el.opsEventCount) el.opsEventCount.textContent = `${events.length} of ${allEvents.length} events`;
             el.opsRecentEvents.innerHTML = events.length
                 ? events.slice().reverse().map((event) => {
-                    const ts = event.timestamp ? new Date(event.timestamp * 1000).toLocaleString() : "—";
-                    const levelClass = {
-                        INFO: "text-blue-300",
-                        WARNING: "text-yellow-300",
-                        ERROR: "text-red-300",
-                        CRITICAL: "text-red-300",
-                        DEBUG: "text-gray-400",
-                    }[event.level] || "text-gray-300";
-                    return `
-                        <div class="px-4 py-3">
-                            <div class="flex items-center justify-between gap-3 text-xs mb-1">
-                                <span class="${levelClass}">${esc(event.level || "INFO")}</span>
-                                <span class="text-gray-500">${esc(ts)}</span>
-                            </div>
-                            <div class="text-xs text-gray-500 mb-1">${esc(event.thread || "—")} · ${esc(event.logger || "—")}</div>
-                            <div class="text-sm text-gray-200 break-words">${esc(event.message || "")}</div>
-                        </div>
-                    `;
+                    const ts = event.timestamp ? new Date(event.timestamp * 1000).toLocaleTimeString([], { hour12: false }) : "—";
+                    const lvl = (event.level || "INFO").toUpperCase();
+                    const cls = (lvl === "ERROR" || lvl === "CRITICAL") ? "log-error" : lvl === "WARNING" ? "log-warn" : lvl === "DEBUG" ? "log-debug" : "log-info";
+                    return `<div class="log-line">
+                        <span class="log-ts">${esc(ts)}</span>
+                        <span class="log-level ${cls}">${esc(lvl)}</span>
+                        <span class="log-thread" title="${esc(event.thread || "")}">${esc(event.thread || "—")}</span>
+                        <span class="log-msg">${esc(event.message || "")}</span>
+                    </div>`;
                 }).join("")
-                : '<div class="px-4 py-8 text-center text-gray-500">No backend events captured yet.</div>';
+                : '<div class="px-4 py-8 text-center text-gray-500 font-sans">No backend events captured yet.</div>';
         }
     }
 
@@ -967,7 +1057,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? `${job.from_name} <${job.from_email}>`
                 : (job.from_email || job.from_name || "—");
             el.historyDetailSender.textContent = senderText;
-            el.historyDetailCounts.textContent = `${job.success_count || 0} sent, ${job.failed_count || 0} failed, ${job.total || 0} total`;
+            const durationSecs = job.completed_at && job.created_at ? job.completed_at - job.created_at : null;
+            const processedCount = (job.success_count || 0) + (job.failed_count || 0);
+            const throughput = durationSecs > 0 && processedCount ? ` · ${(processedCount / (durationSecs / 60)).toFixed(1)} emails/min` : "";
+            el.historyDetailCounts.textContent = `${job.success_count || 0} sent, ${job.failed_count || 0} failed, ${job.total || 0} total${durationSecs ? ` · ${fmtDuration(durationSecs)}${throughput}` : ""}`;
             el.historyDetailError.textContent = job.error || "None";
             el.historyDetailSubject.textContent = job.subject_template || "—";
 
@@ -1043,9 +1136,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!res.success) return;
 
             availableProviders = res.available_providers || [];
+            activeProviderId = res.provider_id || "";
             senderLocked = !!res.sender_locked;
 
             if (el.providerLabel) el.providerLabel.textContent = res.provider;
+            renderProviderSwitcher();
             suggestedSender = res.sender_email || "";
             suggestedSenderName = res.sender_name || "";
 
@@ -1087,6 +1182,30 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function renderProviderSwitcher() {
+        if (!el.providerSwitcher) return;
+        el.providerSwitcher.classList.remove("switching");
+        el.providerSwitcher.innerHTML = availableProviders.map(p => {
+            const active = p.id === activeProviderId;
+            const title = p.has_key
+                ? (active ? `${p.label} is active` : `Switch to ${p.label}`)
+                : `${p.label}: add an API key to enable`;
+            return `<button type="button" class="provider-opt${active ? " active" : ""}" data-provider="${p.id}" title="${title}" aria-pressed="${active}">
+                        <span class="key-dot ${p.has_key ? "ok" : "missing"}"></span>${esc(p.label)}
+                    </button>`;
+        }).join("");
+        el.providerSwitcher.querySelectorAll(".provider-opt").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const id = btn.dataset.provider;
+                if (id === activeProviderId) return;
+                const meta = availableProviders.find(p => p.id === id);
+                if (!meta?.has_key) { openSettings(); return; }
+                el.providerSwitcher.classList.add("switching");
+                switchProvider(id);
+            });
+        });
+    }
+
     async function switchProvider(name) {
         toast(`Switching to ${name}...`, "info");
         try {
@@ -1105,6 +1224,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch {
             toast("Network error.", "error");
         }
+        el.providerSwitcher?.classList.remove("switching");
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -1127,7 +1247,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         el.providerKeyCards.innerHTML = availableProviders.map(p => {
             const hasKey = p.has_key;
-            const isActive = (el.providerLabel?.textContent || "").trim().toLowerCase() === p.label.toLowerCase();
+            const isActive = p.id === activeProviderId;
             const sourceLabel = p.key_source === 'database' ? 'Custom key'
                               : p.key_source === 'env' ? '.env file'
                               : 'Not configured';

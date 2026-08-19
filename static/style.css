@@ -332,3 +332,121 @@ input[type="datetime-local"].input::-webkit-calendar-picker-indicator {
     max-height: 70vh;
     overflow-y: auto;
 }
+
+/* ── Brand Mark ────────────────────────────────────────────────── */
+.brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.65rem;
+    background: linear-gradient(135deg, #6370f2, #3636a4);
+    color: #fff;
+    font-size: 1.05rem;
+    box-shadow: 0 4px 14px rgba(99, 112, 242, 0.35);
+}
+
+/* ── Provider Switcher (segmented) ─────────────────────────────── */
+.provider-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--surface-2, #181d2a);
+    border: 1px solid var(--surface-4, #272e40);
+    border-radius: 0.65rem;
+    padding: 3px;
+}
+.provider-switcher.switching { opacity: 0.6; pointer-events: none; }
+.provider-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+.provider-opt:hover { color: #e5e7eb; background: rgba(49, 58, 79, 0.5); }
+.provider-opt:focus-visible { outline: 2px solid #818cf8; outline-offset: 1px; }
+.provider-opt.active {
+    background: linear-gradient(135deg, rgba(99, 112, 242, 0.35), rgba(79, 78, 230, 0.25));
+    color: #dbe1ff;
+    box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.4);
+}
+.key-dot { width: 7px; height: 7px; border-radius: 9999px; display: inline-block; flex-shrink: 0; }
+.key-dot.ok { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.8); }
+.key-dot.missing { background: #f87171; }
+
+/* ── KPI Cards ─────────────────────────────────────────────────── */
+.kpi-card {
+    background: linear-gradient(160deg, var(--surface-2, #181d2a), var(--surface-1, #111520));
+    border: 1px solid var(--surface-4, #272e40);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    transition: border-color 0.2s, transform 0.2s;
+}
+.kpi-card:hover { border-color: rgba(99, 112, 242, 0.45); transform: translateY(-1px); }
+.kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+.kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-top: 0.25rem; }
+.kpi-sub { font-size: 0.7rem; color: #9ca3af; margin-top: 0.35rem; }
+
+/* ── Success Rate Bar ──────────────────────────────────────────── */
+.rate-bar {
+    width: 72px;
+    height: 5px;
+    border-radius: 9999px;
+    background: var(--surface-4, #272e40);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.rate-bar > span { display: block; height: 100%; border-radius: 9999px; transition: width 0.4s ease; }
+
+/* ── Live Indicator ────────────────────────────────────────────── */
+.live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: #34d399;
+    animation: livePulse 1.6s ease-in-out infinite;
+}
+@keyframes livePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+    50%      { opacity: 0.6; box-shadow: 0 0 0 5px rgba(52, 211, 153, 0); }
+}
+.toggle-checkbox { accent-color: #4f4ee6; width: 0.9rem; height: 0.9rem; cursor: pointer; }
+
+/* ── Log Console ───────────────────────────────────────────────── */
+.log-console {
+    background: #0a0d13;
+    border: 1px solid var(--surface-4, #272e40);
+    border-radius: 0.65rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    padding: 0.5rem 0;
+}
+.log-line { display: flex; gap: 0.75rem; padding: 0.15rem 1rem; }
+.log-line:hover { background: rgba(49, 58, 79, 0.35); }
+.log-ts { color: #4b5563; flex-shrink: 0; }
+.log-level { flex-shrink: 0; font-weight: 700; min-width: 62px; }
+.log-info { color: #60a5fa; }
+.log-warn { color: #fbbf24; }
+.log-error { color: #f87171; }
+.log-debug { color: #6b7280; }
+.log-thread { color: #6d7a94; flex-shrink: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-msg { color: #d1d5db; word-break: break-word; }
+
+/* Guarantee compact selects despite .input width:100% */
+.input.w-auto { width: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+    .live-dot { animation: none; }
+    .tab-panel:not(.hidden) { animation: none; }
+    .kpi-card:hover { transform: none; }
+}
