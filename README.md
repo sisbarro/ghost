@@ -19,7 +19,7 @@ The Windows installer includes Python and all application dependencies. End user
 
 ## Install on Windows
 
-1. Download `GhostMail-Setup.exe` from the repository's latest GitHub release.
+1. Sign in to GitHub with access to this repository, then download **[GhostMail-Setup.exe for Windows](https://github.com/sisbarro/ghost/releases/download/v1.1.0/GhostMail-Setup.exe)**.
 2. Double-click the installer.
 3. Keep **Create a desktop shortcut** selected and choose **Install**.
 4. Leave **Launch GhostMail** selected and choose **Finish**.
@@ -27,6 +27,8 @@ The Windows installer includes Python and all application dependencies. End user
 6. Open **API Keys**, add a Resend or ZeptoMail key, and test it before sending.
 
 The installer does not require administrator privileges. GhostMail opens in your default browser and stores its data in `%LOCALAPPDATA%\GhostMail`.
+
+This is a Windows `.exe`, not an Android app. If the link opens an Android download or app store, discard that file and use the exact GitHub release link above. Because this repository is private, GitHub returns a 404 unless the browser is signed in to an authorized account.
 
 > [!IMPORTANT]
 > Change the initial password before normal use. Create `%LOCALAPPDATA%\GhostMail\.env`, set `APP_PASSWORD` and `FLASK_SECRET_KEY`, then restart GhostMail. See [`.env.example`](.env.example) for the available settings.
