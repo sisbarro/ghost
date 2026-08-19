@@ -1,6 +1,5 @@
 """GhostMail launcher: starts the local server and opens the web interface."""
 
-import ctypes
 import os
 import socket
 import threading
@@ -14,15 +13,22 @@ from runtime_paths import DATA_DIR
 HOST = "127.0.0.1"
 PREFERRED_PORT = 5000
 PORT_FILE = os.path.join(DATA_DIR, "server.port")
-_mutex_handle = None
+_instance_handle = None  # keeps the mutex/lock alive for the process lifetime
 
 
 def _claim_single_instance() -> bool:
-    global _mutex_handle
-    if os.name != "nt":
+    global _instance_handle
+    if os.name == "nt":
+        import ctypes
+        _instance_handle = ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\GhostMail")
+        return ctypes.windll.kernel32.GetLastError() != 183
+    import fcntl
+    _instance_handle = open(os.path.join(DATA_DIR, "ghostmail.lock"), "w")
+    try:
+        fcntl.flock(_instance_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return True
-    _mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\GhostMail")
-    return ctypes.windll.kernel32.GetLastError() != 183
+    except OSError:
+        return False
 
 
 def _existing_url() -> str | None:

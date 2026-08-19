@@ -15,6 +15,8 @@ def get_data_dir() -> str:
     elif getattr(sys, "frozen", False) and os.name == "nt":
         root = os.getenv("LOCALAPPDATA") or os.path.expanduser("~")
         data_dir = os.path.join(root, APP_NAME)
+    elif getattr(sys, "frozen", False) and sys.platform == "darwin":
+        data_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_NAME)
     elif getattr(sys, "frozen", False):
         data_dir = os.path.join(os.path.expanduser("~"), f".{APP_NAME.lower()}")
     else:

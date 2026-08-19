@@ -36,6 +36,26 @@ This is a Windows `.exe`, not an Android app. If the link opens an Android downl
 > [!NOTE]
 > Locally built installers are unsigned. Windows SmartScreen may display **Windows protected your PC** until release builds are signed with a trusted code-signing certificate.
 
+## Install on macOS
+
+1. Download `GhostMail.dmg` from the repository's GitHub release assets (or build it — see below).
+2. Open the DMG and drag **GhostMail.app** to **Applications**.
+3. First launch: right-click **GhostMail.app** and choose **Open** (unsigned builds require this once), or approve it under **System Settings → Privacy & Security**.
+4. Sign in with the initial password `ghost2026`, then add a provider API key.
+
+GhostMail opens in the default browser and stores its data in `~/Library/Application Support/GhostMail`. To change the password, create `.env` in that folder and set `APP_PASSWORD`, then relaunch.
+
+### Build the macOS app
+
+On a Mac with Python 3.10+, run from this directory:
+
+```bash
+chmod +x build-macos.sh
+./build-macos.sh
+```
+
+This produces `installer/output/GhostMail.dmg` containing `GhostMail.app`. macOS apps must be built on macOS; the Windows machine cannot cross-build them. For public distribution without Gatekeeper warnings, sign with a Developer ID certificate and notarize.
+
 ## Provider setup
 
 GhostMail sends through an account you control:
@@ -64,7 +84,7 @@ GhostMail merges the current recipient's values, creates the PDF in memory, and 
 
 Requirements:
 
-- Windows 10 or later
+- Windows 10 or later, or macOS 12 or later
 - Python 3.10 or later
 
 ```powershell

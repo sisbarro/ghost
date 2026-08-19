@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
 
 
 a = Analysis(
@@ -37,3 +38,15 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+if sys.platform == "darwin":
+    app = BUNDLE(
+        exe,
+        name="GhostMail.app",
+        icon=None,
+        bundle_identifier="com.ghostmail.desktop",
+        info_plist={
+            "CFBundleShortVersionString": "1.2.0",
+            "NSHighResolutionCapable": True,
+        },
+    )
