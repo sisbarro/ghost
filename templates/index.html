@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostMail — Email Delivery Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        ghost: {
+                            50:  '#f0f4ff',
+                            100: '#e0e8ff',
+                            200: '#c7d4fe',
+                            300: '#a4b8fc',
+                            400: '#8196f8',
+                            500: '#6370f2',
+                            600: '#4f4ee6',
+                            700: '#4240cb',
+                            800: '#3636a4',
+                            900: '#303382',
+                            950: '#1e1e4c',
+                        },
+                        surface: {
+                            0:   '#0b0e14',
+                            1:   '#111520',
+                            2:   '#181d2a',
+                            3:   '#1f2535',
+                            4:   '#272e40',
+                            5:   '#313a4f',
+                        },
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-surface-0 text-gray-200 min-h-screen font-sans antialiased">
+
+<!-- ════════════════════════════════════════════════════════════════════
+     LOGIN OVERLAY
+     ════════════════════════════════════════════════════════════════════ -->
+<div id="login-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-surface-0/95 backdrop-blur-sm {{ 'hidden' if authenticated else '' }}">
+    <div class="bg-surface-2 border border-surface-4 rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ghost-600/20 mb-4">
+                <i class="fas fa-ghost text-3xl text-ghost-400"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-white">GhostMail</h1>
+            <p class="text-sm text-gray-400 mt-1">Enter password to continue</p>
+        </div>
+        <form id="login-form" class="space-y-4">
+            <input type="password" id="login-password" placeholder="Password"
+                   class="w-full px-4 py-3 bg-surface-3 border border-surface-5 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ghost-500 focus:border-transparent"
+                   autocomplete="current-password" autofocus>
+            <button type="submit" id="login-btn"
+                    class="w-full py-3 bg-ghost-600 hover:bg-ghost-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-ghost-400 focus:ring-offset-2 focus:ring-offset-surface-2">
+                <i class="fas fa-lock mr-2"></i>Unlock
+            </button>
+            <p id="login-error" class="text-red-400 text-sm text-center hidden"></p>
+        </form>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     MAIN APPLICATION
+     ════════════════════════════════════════════════════════════════════ -->
+<div id="app" class="{{ 'hidden' if not authenticated else '' }}">
+
+    <!-- ── Header ──────────────────────────────────────────────────── -->
+    <header class="border-b border-surface-4 bg-surface-1/80 backdrop-blur-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-ghost text-2xl text-ghost-400"></i>
+                    <span class="text-xl font-bold text-white tracking-tight">GhostMail</span>
+                    <div class="ml-2 px-2.5 py-1 text-xs font-medium rounded-full bg-ghost-600/20 text-ghost-300 border border-ghost-600/30 flex items-center gap-1.5">
+                        <i class="fas fa-paperclip text-[10px] opacity-70"></i>
+                        <span id="provider-label">{{ provider_name }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <span id="sender-display" class="text-xs text-gray-500 hidden sm:inline">{{ sender_email }}</span>
+                    <button id="btn-settings" class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-ghost-200 hover:text-white bg-ghost-600/20 hover:bg-ghost-600/30 border border-ghost-500/40 rounded-lg transition-all" title="API Key Settings">
+                        <i class="fas fa-gear"></i>
+                        <span>API Keys</span>
+                    </button>
+                    <button id="logout-btn" class="text-gray-400 hover:text-white transition-colors text-sm" title="Logout">
+                        <i class="fas fa-right-from-bracket mr-1"></i>Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ── Tab Navigation ──────────────────────────────────────── -->
+        <nav class="flex space-x-1 bg-surface-1 p-1 rounded-xl mb-6 border border-surface-3" role="tablist">
+            <button data-tab="compose" role="tab" aria-selected="true"
+                    class="tab-btn active flex-1 py-2.5 px-4 text-sm font-medium rounded-lg transition-all">
+                <i class="fas fa-pen-to-square mr-2"></i>Compose
+            </button>
+            <button data-tab="campaign" role="tab" aria-selected="false"
+                    class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg transition-all">
+                <i class="fas fa-paper-plane mr-2"></i>Campaign
+            </button>
+            <button data-tab="scheduled" role="tab" aria-selected="false"
+                    class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg transition-all">
+                <i class="fas fa-calendar-clock mr-2"></i>Scheduled
+            </button>
+            <button data-tab="history" role="tab" aria-selected="false"
+                    class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg transition-all">
+                <i class="fas fa-clock-rotate-left mr-2"></i>History
+            </button>
+            <button data-tab="operations" role="tab" aria-selected="false"
+                    class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg transition-all">
+                <i class="fas fa-microscope mr-2"></i>Operations
+            </button>
+        </nav>
+
+        <!-- ══════════════════════════════════════════════════════════
+             COMPOSE TAB
+             ══════════════════════════════════════════════════════════ -->
+        <section id="panel-compose" class="tab-panel" role="tabpanel">
+            <div class="bg-surface-1 rounded-xl border border-surface-3 p-6">
+                <h2 class="text-lg font-semibold text-white mb-1">Single Email</h2>
+                <p class="text-sm text-gray-400 mb-6">Compose and send an individual email. * = required.</p>
+
+                <form id="single-form" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Left column -->
+                        <div class="space-y-4">
+                            <div>
+                                <label for="s-to-email" class="label">To Email *</label>
+                                <input type="email" id="s-to-email" name="to_email" placeholder="recipient@example.com" required class="input">
+                            </div>
+                            <div>
+                                <label for="s-to-name" class="label">Recipient Name</label>
+                                <input type="text" id="s-to-name" name="to_name" placeholder="John Doe" class="input">
+                            </div>
+                            <div>
+                                <label for="s-from-email" class="label">From Email</label>
+                                <input type="email" id="s-from-email" name="from_email" placeholder="Default: {{ sender_email }}" class="input">
+                                <p id="s-from-domain-hint" class="text-xs mt-1 text-gray-500 hidden"></p>
+                            </div>
+                            <div>
+                                <label for="s-from-name" class="label">From Name</label>
+                                <input type="text" id="s-from-name" name="from_name" placeholder="Default: {{ sender_name }}" class="input">
+                            </div>
+                        </div>
+                        <!-- Right column -->
+                        <div class="space-y-4">
+                            <div>
+                                <label for="s-subject" class="label">Subject *</label>
+                                <input type="text" id="s-subject" name="subject" placeholder="Your subject line" required class="input">
+                            </div>
+                            <div>
+                                <label for="s-cc" class="label">CC</label>
+                                <input type="text" id="s-cc" name="cc" placeholder="Comma-separated emails" class="input">
+                            </div>
+                            <div>
+                                <label for="s-bcc" class="label">BCC</label>
+                                <input type="text" id="s-bcc" name="bcc" placeholder="Comma-separated emails" class="input">
+                            </div>
+                            <div>
+                                <label for="s-attachments" class="label">Attachments</label>
+                                <input type="file" id="s-attachments" name="attachments" multiple class="file-input">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="label mb-0">Email Content *</label>
+                            <button type="button" id="s-mode-toggle" class="mode-toggle" data-editor="compose" title="Switch to HTML source">
+                                <i class="fas fa-code text-xs"></i><span>HTML</span>
+                            </button>
+                        </div>
+                        <div id="s-editor-wrap">
+                            <div id="s-editor"></div>
+                        </div>
+                        <textarea id="s-content" name="html_content" rows="10" placeholder="<p>Hello {{Name}},</p>" class="input font-mono text-sm hidden"></textarea>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-surface-3">
+                        <div class="flex items-center space-x-3">
+                            <label for="s-schedule-time" class="text-xs text-gray-400 whitespace-nowrap">
+                                <i class="fas fa-calendar-clock mr-1"></i>Schedule:
+                            </label>
+                            <input type="datetime-local" id="s-schedule-time" class="input text-xs py-1.5 px-2 w-auto min-w-[200px]">
+                            <button type="button" id="btn-schedule-single" class="btn-secondary text-xs py-1.5" disabled>
+                                <i class="fas fa-clock mr-1"></i>Schedule
+                            </button>
+                        </div>
+                        <button type="button" id="btn-send-single" class="btn-primary">
+                            <i class="fas fa-paper-plane mr-2"></i>Send Email
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- ══════════════════════════════════════════════════════════
+             CAMPAIGN TAB
+             ══════════════════════════════════════════════════════════ -->
+        <section id="panel-campaign" class="tab-panel hidden" role="tabpanel">
+
+            <!-- Step 1: Upload -->
+            <div class="bg-surface-1 rounded-xl border border-surface-3 p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">
+                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-ghost-600 text-white text-sm font-bold mr-2">1</span>
+                            Upload Recipients
+                        </h2>
+                        <p class="text-sm text-gray-400 mt-1 ml-9">Excel (.xlsx/.xls) or text file with one email per line. Excel must have an "Email" column.</p>
+                    </div>
+                </div>
+
+                <div id="drop-zone" class="ml-9 border-2 border-dashed border-surface-5 rounded-xl p-8 text-center cursor-pointer hover:border-ghost-500 hover:bg-surface-2/50 transition-all group"
+                     tabindex="0" role="button" aria-label="Upload recipient file">
+                    <i class="fas fa-cloud-arrow-up text-4xl text-gray-500 group-hover:text-ghost-400 transition-colors mb-3"></i>
+                    <p class="text-sm text-gray-400">
+                        <span class="text-ghost-400 font-medium">Click to upload</span> or drag &amp; drop
+                    </p>
+                    <p class="text-xs text-gray-500 mt-1">Max 1,000 recipients</p>
+                    <input type="file" id="file-input" class="hidden" accept=".txt,.xlsx,.xls">
+                </div>
+
+                <!-- File info bar -->
+                <div id="file-info" class="ml-9 mt-4 hidden">
+                    <div class="flex items-center justify-between bg-surface-2 border border-surface-4 rounded-lg px-4 py-3">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-file-spreadsheet text-ghost-400"></i>
+                            <div>
+                                <span id="file-name" class="text-sm font-medium text-white"></span>
+                                <span class="text-sm text-gray-400 ml-2">
+                                    (<span id="recipient-count" class="text-ghost-300 font-semibold">0</span> recipients)
+                                </span>
+                            </div>
+                        </div>
+                        <button type="button" id="btn-clear-file" class="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 transition-colors">
+                            <i class="fas fa-xmark mr-1"></i>Clear
+                        </button>
+                    </div>
+
+                    <!-- Template variables -->
+                    <div id="var-chips" class="mt-3 hidden">
+                        <p class="text-xs text-gray-400 mb-2 ml-1">Available variables (click to copy):</p>
+                        <div id="var-chips-list" class="flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+
+                <!-- DATA TABLE PREVIEW -->
+                <div id="data-preview" class="ml-9 mt-4 hidden">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-sm font-medium text-gray-300">
+                            <i class="fas fa-table mr-1.5 text-ghost-400"></i>Data Preview
+                            <span id="preview-showing" class="text-gray-500 font-normal ml-1"></span>
+                        </h3>
+                    </div>
+                    <div class="overflow-x-auto rounded-lg border border-surface-4">
+                        <table class="min-w-full text-sm">
+                            <thead id="preview-thead" class="bg-surface-3 text-xs uppercase tracking-wider text-gray-400">
+                            </thead>
+                            <tbody id="preview-tbody" class="divide-y divide-surface-4 bg-surface-2">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Compose -->
+            <div class="bg-surface-1 rounded-xl border border-surface-3 p-6 mb-6">
+                <h2 class="text-lg font-semibold text-white mb-4">
+                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-ghost-600 text-white text-sm font-bold mr-2">2</span>
+                    Compose &amp; Configure
+                </h2>
+
+                <form id="bulk-form" class="space-y-5 ml-9">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                            <label for="b-from-email" class="label">From Email (Template)</label>
+                            <input type="text" id="b-from-email" name="from_email_template" placeholder="Default or {{Column}}" class="input">
+                        </div>
+                        <div>
+                            <label for="b-from-name" class="label">From Name (Template)</label>
+                            <input type="text" id="b-from-name" name="from_name_template" placeholder="Default or {{Column}}" class="input">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="b-subject" class="label">Subject *</label>
+                        <input type="text" id="b-subject" name="subject" placeholder="Subject with {{Variable}} placeholders" required class="input">
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="label mb-0">Email Content *</label>
+                            <button type="button" id="b-mode-toggle" class="mode-toggle" data-editor="campaign" title="Switch to HTML source">
+                                <i class="fas fa-code text-xs"></i><span>HTML</span>
+                            </button>
+                        </div>
+                        <div id="b-editor-wrap">
+                            <div id="b-editor"></div>
+                        </div>
+                        <textarea id="b-content" name="html_content" rows="8" placeholder="<p>Dear {{First_Name}},</p>" class="input font-mono text-sm hidden"></textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div>
+                            <label for="b-attachments" class="label">Common Attachments</label>
+                            <input type="file" id="b-attachments" name="attachments" multiple class="file-input">
+                        </div>
+                        <div>
+                            <label for="b-interval" class="label">Sending Interval</label>
+                            <div class="flex items-center space-x-3 mt-1">
+                                <input type="range" id="b-interval" name="interval" min="1" max="60" value="4"
+                                       class="flex-1 h-2 bg-surface-4 rounded-full appearance-none cursor-pointer accent-ghost-500">
+                                <span id="interval-display" class="text-sm text-ghost-300 font-mono min-w-[40px] text-right bg-surface-3 px-2 py-1 rounded">4s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-3 pt-4 border-t border-surface-3">
+                        <label for="b-schedule-time" class="text-xs text-gray-400 whitespace-nowrap">
+                            <i class="fas fa-calendar-clock mr-1"></i>Schedule:
+                        </label>
+                        <input type="datetime-local" id="b-schedule-time" class="input text-xs py-1.5 px-2 w-auto min-w-[200px]">
+                        <button type="button" id="btn-schedule-bulk" class="btn-secondary text-xs py-1.5" disabled>
+                            <i class="fas fa-clock mr-1"></i>Schedule Campaign
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between pt-4">
+                        <button type="button" id="btn-preview" class="btn-secondary" disabled>
+                            <i class="fas fa-eye mr-2"></i>Preview Email
+                        </button>
+                        <button type="button" id="btn-send-bulk" class="btn-primary" disabled>
+                            <i class="fas fa-rocket mr-2"></i>Start Campaign
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 3: Progress -->
+            <div id="progress-section" class="bg-surface-1 rounded-xl border border-surface-3 p-6 hidden">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-lg font-semibold text-white">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-ghost-600 text-white text-sm font-bold mr-2">3</span>
+                        Campaign Progress
+                    </h2>
+                    <div id="progress-controls" class="flex items-center space-x-2">
+                        <button id="btn-pause" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-yellow-600/20 text-yellow-300 border border-yellow-600/30 hover:bg-yellow-600/30 transition-colors hidden">
+                            <i class="fas fa-pause mr-1"></i>Pause
+                        </button>
+                        <button id="btn-resume" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600/20 text-green-300 border border-green-600/30 hover:bg-green-600/30 transition-colors hidden">
+                            <i class="fas fa-play mr-1"></i>Resume
+                        </button>
+                        <button id="btn-cancel" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600/20 text-red-300 border border-red-600/30 hover:bg-red-600/30 transition-colors hidden">
+                            <i class="fas fa-stop mr-1"></i>Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-5 ml-9">
+                    <!-- Progress bar -->
+                    <div>
+                        <div class="flex justify-between text-xs font-medium mb-1.5">
+                            <span id="pct-text" class="text-ghost-300">0%</span>
+                            <span id="count-text" class="text-gray-400">0 / 0</span>
+                        </div>
+                        <div class="h-3 bg-surface-4 rounded-full overflow-hidden">
+                            <div id="progress-bar" class="h-full bg-ghost-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Current + status -->
+                    <div class="flex items-center space-x-2 text-sm">
+                        <div id="spin-indicator" class="h-3 w-3 rounded-full bg-ghost-500 animate-pulse hidden"></div>
+                        <span class="text-gray-400">Current:</span>
+                        <span id="current-email" class="font-mono text-ghost-300 truncate">—</span>
+                    </div>
+
+                    <!-- Stats cards -->
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-3 text-center">
+                            <div id="stat-total" class="text-xl font-bold text-white">0</div>
+                            <div class="text-xs text-gray-400 uppercase tracking-wider mt-0.5">Total</div>
+                        </div>
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-3 text-center">
+                            <div id="stat-success" class="text-xl font-bold text-green-400">0</div>
+                            <div class="text-xs text-gray-400 uppercase tracking-wider mt-0.5">Sent</div>
+                        </div>
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-3 text-center">
+                            <div id="stat-failed" class="text-xl font-bold text-red-400">0</div>
+                            <div class="text-xs text-gray-400 uppercase tracking-wider mt-0.5">Failed</div>
+                        </div>
+                    </div>
+
+                    <!-- Time -->
+                    <div class="text-xs text-gray-500 text-center" id="time-estimate">—</div>
+
+                    <!-- Failed list -->
+                    <div id="failed-section" class="hidden">
+                        <button id="btn-toggle-failed" type="button" class="text-xs text-ghost-400 hover:text-ghost-300 transition-colors">
+                            <i class="fas fa-chevron-right mr-1 transition-transform duration-200"></i>
+                            Show failed (<span id="failed-count-label">0</span>)
+                        </button>
+                        <ul id="failed-list" class="mt-2 hidden max-h-48 overflow-y-auto bg-surface-3 rounded-lg border border-surface-4 p-3 space-y-1 text-xs">
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══════════════════════════════════════════════════════════
+             SCHEDULED TAB
+             ══════════════════════════════════════════════════════════ -->
+        <section id="panel-scheduled" class="tab-panel hidden" role="tabpanel">
+            <div class="bg-surface-1 rounded-xl border border-surface-3 p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-lg font-semibold text-white">
+                        <i class="fas fa-calendar-clock mr-2 text-ghost-400"></i>Scheduled Jobs
+                    </h2>
+                    <button id="btn-refresh-scheduled" class="text-xs text-ghost-400 hover:text-ghost-300 transition-colors">
+                        <i class="fas fa-arrows-rotate mr-1"></i>Refresh
+                    </button>
+                </div>
+                <div class="overflow-x-auto rounded-lg border border-surface-4">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-surface-3 text-xs uppercase tracking-wider text-gray-400">
+                            <tr>
+                                <th class="px-4 py-3 text-left">ID</th>
+                                <th class="px-4 py-3 text-center">Type</th>
+                                <th class="px-4 py-3 text-left">Subject</th>
+                                <th class="px-4 py-3 text-left">Scheduled For</th>
+                                <th class="px-4 py-3 text-center">Status</th>
+                                <th class="px-4 py-3 text-left">Countdown</th>
+                                <th class="px-4 py-3 text-left">Created</th>
+                                <th class="px-4 py-3 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduled-tbody" class="divide-y divide-surface-4 bg-surface-2">
+                            <tr>
+                                <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                                    <i class="fas fa-calendar-xmark text-2xl mb-2 block"></i>No scheduled jobs.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══════════════════════════════════════════════════════════
+             HISTORY TAB
+             ══════════════════════════════════════════════════════════ -->
+        <section id="panel-history" class="tab-panel hidden" role="tabpanel">
+            <div class="bg-surface-1 rounded-xl border border-surface-3 p-6">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-lg font-semibold text-white">
+                        <i class="fas fa-clock-rotate-left mr-2 text-ghost-400"></i>Delivery History
+                    </h2>
+                    <button id="btn-refresh-history" class="text-xs text-ghost-400 hover:text-ghost-300 transition-colors">
+                        <i class="fas fa-arrows-rotate mr-1"></i>Refresh
+                    </button>
+                </div>
+                <div class="overflow-x-auto rounded-lg border border-surface-4">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-surface-3 text-xs uppercase tracking-wider text-gray-400">
+                            <tr>
+                                <th class="px-4 py-3 text-left">Job ID</th>
+                                <th class="px-4 py-3 text-left">Provider</th>
+                                <th class="px-4 py-3 text-left">Subject</th>
+                                <th class="px-4 py-3 text-center">Total</th>
+                                <th class="px-4 py-3 text-center">Sent</th>
+                                <th class="px-4 py-3 text-center">Failed</th>
+                                <th class="px-4 py-3 text-center">Status</th>
+                                <th class="px-4 py-3 text-left">Date</th>
+                                <th class="px-4 py-3 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-tbody" class="divide-y divide-surface-4 bg-surface-2">
+                            <tr>
+                                <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                                    <i class="fas fa-inbox text-2xl mb-2 block"></i>No delivery history yet.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="panel-operations" class="tab-panel hidden" role="tabpanel">
+            <div class="space-y-6">
+                <div class="bg-surface-1 rounded-xl border border-surface-3 p-6">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">
+                                <i class="fas fa-microscope mr-2 text-ghost-400"></i>Operations View
+                            </h2>
+                            <p id="ops-source-note" class="text-sm text-gray-400 mt-1">Unified runtime and database state.</p>
+                        </div>
+                        <button id="btn-refresh-operations" class="text-xs text-ghost-400 hover:text-ghost-300 transition-colors">
+                            <i class="fas fa-arrows-rotate mr-1"></i>Refresh
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-4">
+                            <div class="text-xs uppercase tracking-wider text-gray-500 mb-2">Active Provider</div>
+                            <div id="ops-active-provider" class="text-sm font-semibold text-white">—</div>
+                        </div>
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-4">
+                            <div class="text-xs uppercase tracking-wider text-gray-500 mb-2">Resolved Sender</div>
+                            <div id="ops-resolved-sender" class="text-sm font-semibold text-white break-all">—</div>
+                        </div>
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-4">
+                            <div class="text-xs uppercase tracking-wider text-gray-500 mb-2">Scheduler</div>
+                            <div id="ops-scheduler" class="text-sm font-semibold text-white">—</div>
+                        </div>
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-4">
+                            <div class="text-xs uppercase tracking-wider text-gray-500 mb-2">Database</div>
+                            <div id="ops-database-path" class="text-xs font-mono text-ghost-300 break-all">—</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="text-sm font-semibold text-white">Delivery Counts</div>
+                                <div id="ops-uptime" class="text-xs text-gray-500">—</div>
+                            </div>
+                            <div id="ops-job-status-stats" class="flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="text-sm font-semibold text-white">Scheduled Counts</div>
+                                <div id="ops-active-workers" class="text-xs text-gray-500">—</div>
+                            </div>
+                            <div id="ops-scheduled-stats" class="flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="bg-surface-2 border border-surface-4 rounded-lg p-4">
+                            <div class="text-sm font-semibold text-white mb-3">Provider History</div>
+                            <div id="ops-provider-stats" class="flex flex-wrap gap-2"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div class="bg-surface-1 rounded-xl border border-surface-3 p-6">
+                        <h3 class="text-base font-semibold text-white mb-4">Active Workers</h3>
+                        <div class="overflow-x-auto rounded-lg border border-surface-4">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-surface-3 text-xs uppercase tracking-wider text-gray-400">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Job</th>
+                                        <th class="px-4 py-3 text-left">Thread</th>
+                                        <th class="px-4 py-3 text-center">Alive</th>
+                                        <th class="px-4 py-3 text-left">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ops-workers-tbody" class="divide-y divide-surface-4 bg-surface-2">
+                                    <tr>
+                                        <td colspan="4" class="px-4 py-8 text-center text-gray-500">No active workers.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bg-surface-1 rounded-xl border border-surface-3 p-6">
+                        <h3 class="text-base font-semibold text-white mb-4">Recent Deliveries</h3>
+                        <div id="ops-recent-jobs" class="space-y-3"></div>
+                    </div>
+                </div>
+
+                <div class="bg-surface-1 rounded-xl border border-surface-3 p-6">
+                    <h3 class="text-base font-semibold text-white mb-4">Backend Event Stream</h3>
+                    <div id="ops-recent-events" class="max-h-[420px] overflow-y-auto rounded-lg border border-surface-4 bg-surface-2 divide-y divide-surface-4 text-sm"></div>
+                </div>
+            </div>
+        </section>
+
+    </div><!-- /max-w-7xl -->
+
+    <!-- Footer -->
+    <footer class="mt-12 py-6 border-t border-surface-3 text-center text-xs text-gray-500">
+        GhostMail &copy; <span id="year"></span> &mdash; Unified Email Delivery Platform
+    </footer>
+
+</div><!-- /#app -->
+
+<!-- ════════════════════════════════════════════════════════════════════
+     PREVIEW MODAL
+     ════════════════════════════════════════════════════════════════════ -->
+<div id="preview-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div class="bg-surface-2 border border-surface-4 rounded-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col shadow-2xl">
+        <!-- Modal header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-surface-4">
+            <h3 class="text-lg font-semibold text-white"><i class="fas fa-eye mr-2 text-ghost-400"></i>Email Preview</h3>
+            <button id="btn-close-preview" class="text-gray-400 hover:text-white transition-colors">
+                <i class="fas fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <!-- Modal meta -->
+        <div class="px-6 py-3 bg-surface-3/50 border-b border-surface-4 text-sm space-y-1">
+            <div><span class="text-gray-400 w-16 inline-block">From:</span> <span id="prev-from" class="text-white"></span></div>
+            <div><span class="text-gray-400 w-16 inline-block">To:</span> <span id="prev-to" class="text-white"></span></div>
+            <div><span class="text-gray-400 w-16 inline-block">Subject:</span> <span id="prev-subject" class="text-white font-medium"></span></div>
+        </div>
+        <!-- Modal body -->
+        <div class="flex-1 overflow-y-auto p-6">
+            <div id="prev-body" class="bg-white rounded-lg p-6 text-gray-900 min-h-[200px]"></div>
+        </div>
+        <!-- Modal footer -->
+        <div class="px-6 py-4 border-t border-surface-4 flex justify-end">
+            <button id="btn-close-preview-2" class="btn-secondary">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     API KEY SETTINGS MODAL
+     ════════════════════════════════════════════════════════════════════ -->
+<div id="settings-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div class="bg-surface-2 border border-surface-4 rounded-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col shadow-2xl">
+        <!-- Modal header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-surface-4">
+            <h3 class="text-lg font-semibold text-white">
+                <i class="fas fa-key mr-2 text-ghost-400"></i>API Key Settings
+            </h3>
+            <button id="btn-close-settings" class="text-gray-400 hover:text-white transition-colors">
+                <i class="fas fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <!-- Modal body -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-4">
+            <p class="text-sm text-gray-400">Manage the two delivery providers used by GhostMail. Save a key to activate it immediately.</p>
+
+            <!-- Provider key cards — rendered dynamically -->
+            <div id="provider-key-cards" class="space-y-3"></div>
+        </div>
+        <!-- Modal footer -->
+        <div class="px-6 py-4 border-t border-surface-4 flex justify-end">
+            <button id="btn-close-settings-2" class="btn-secondary">Close</button>
+        </div>
+    </div>
+</div>
+
+<div id="history-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div class="bg-surface-2 border border-surface-4 rounded-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col shadow-2xl">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-surface-4">
+            <h3 class="text-lg font-semibold text-white"><i class="fas fa-clock-rotate-left mr-2 text-ghost-400"></i>Delivery Details</h3>
+            <button id="btn-close-history-modal" class="text-gray-400 hover:text-white transition-colors">
+                <i class="fas fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6 space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="bg-surface-3 rounded-lg border border-surface-4 p-4 space-y-2">
+                    <div><span class="text-gray-400">Job ID:</span> <span id="history-detail-id" class="font-mono text-ghost-300"></span></div>
+                    <div><span class="text-gray-400">Type:</span> <span id="history-detail-kind"></span></div>
+                    <div><span class="text-gray-400">Provider:</span> <span id="history-detail-provider"></span></div>
+                    <div><span class="text-gray-400">Status:</span> <span id="history-detail-status"></span></div>
+                </div>
+                <div class="bg-surface-3 rounded-lg border border-surface-4 p-4 space-y-2">
+                    <div><span class="text-gray-400">Created:</span> <span id="history-detail-date"></span></div>
+                    <div><span class="text-gray-400">Sender:</span> <span id="history-detail-sender"></span></div>
+                    <div><span class="text-gray-400">Counts:</span> <span id="history-detail-counts"></span></div>
+                    <div><span class="text-gray-400">Error:</span> <span id="history-detail-error" class="text-red-300"></span></div>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-sm font-semibold text-white mb-2">Subject</h4>
+                <div id="history-detail-subject" class="bg-surface-3 rounded-lg border border-surface-4 px-4 py-3 text-sm text-gray-200"></div>
+            </div>
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-sm font-semibold text-white">Failures</h4>
+                    <span id="history-detail-failure-count" class="text-xs text-gray-500"></span>
+                </div>
+                <ul id="history-detail-failures" class="bg-surface-3 rounded-lg border border-surface-4 p-4 space-y-2 text-sm"></ul>
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t border-surface-4 flex justify-end">
+            <button id="btn-close-history-modal-2" class="btn-secondary">Close</button>
+        </div>
+    </div>
+</div>
+
+<div id="scheduled-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div class="bg-surface-2 border border-surface-4 rounded-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col shadow-2xl">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-surface-4">
+            <h3 class="text-lg font-semibold text-white"><i class="fas fa-calendar-clock mr-2 text-ghost-400"></i>Scheduled Job</h3>
+            <button id="btn-close-scheduled-modal" class="text-gray-400 hover:text-white transition-colors">
+                <i class="fas fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6 space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="bg-surface-3 rounded-lg border border-surface-4 p-4 space-y-2">
+                    <div><span class="text-gray-400">ID:</span> <span id="scheduled-detail-id" class="font-mono text-ghost-300"></span></div>
+                    <div><span class="text-gray-400">Type:</span> <span id="scheduled-detail-type"></span></div>
+                    <div><span class="text-gray-400">Status:</span> <span id="scheduled-detail-status"></span></div>
+                    <div><span class="text-gray-400">Provider:</span> <span id="scheduled-detail-provider"></span></div>
+                </div>
+                <div class="bg-surface-3 rounded-lg border border-surface-4 p-4 space-y-3">
+                    <div>
+                        <label for="scheduled-edit-time" class="label">Scheduled Time</label>
+                        <input id="scheduled-edit-time" type="datetime-local" class="input">
+                    </div>
+                    <div id="scheduled-detail-error-wrap" class="hidden text-sm text-red-300"></div>
+                    <button id="btn-open-linked-job" type="button" class="btn-secondary hidden">
+                        <i class="fas fa-up-right-from-square mr-2"></i>Open Delivery Result
+                    </button>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-sm font-semibold text-white mb-2">Subject</h4>
+                <div id="scheduled-detail-subject" class="bg-surface-3 rounded-lg border border-surface-4 px-4 py-3 text-sm text-gray-200"></div>
+            </div>
+            <div>
+                <h4 class="text-sm font-semibold text-white mb-2">Payload Preview</h4>
+                <div id="scheduled-detail-body" class="bg-white rounded-lg p-5 text-gray-900 min-h-[180px]"></div>
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t border-surface-4 flex justify-end gap-2">
+            <button id="btn-save-scheduled" class="btn-primary hidden">
+                <i class="fas fa-save mr-2"></i>Save Changes
+            </button>
+            <button id="btn-close-scheduled-modal-2" class="btn-secondary">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Toast container ─────────────────────────────────────────────── -->
+<div id="toasts" class="fixed bottom-5 right-5 z-[60] w-full max-w-sm space-y-2"></div>
+
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

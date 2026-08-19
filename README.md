@@ -1,0 +1,108 @@
+# GhostMail
+
+GhostMail is a self-hosted email delivery application for Windows. It provides a browser-based interface for composing individual messages, sending spreadsheet-driven campaigns, scheduling delivery, and monitoring results through Resend or ZeptoMail.
+
+The Windows installer includes Python and all application dependencies. End users do not need a development environment.
+
+## Features
+
+- Send individual HTML emails with CC, BCC, and attachments
+- Import campaign recipients from CSV, XLS, or XLSX files
+- Personalize and preview bulk messages for up to 1,000 recipients
+- Pause, resume, cancel, and inspect campaign jobs
+- Schedule messages and campaigns for later delivery
+- Store and test Resend and ZeptoMail API keys from the interface
+- Check verified sender domains when supported by the provider
+- Keep job history and delivery failures in a local SQLite database
+- Run locally on `127.0.0.1`; the application is not exposed to the network
+
+## Install on Windows
+
+1. Download `GhostMail-Setup.exe` from the repository's latest GitHub release.
+2. Double-click the installer.
+3. Keep **Create a desktop shortcut** selected and choose **Install**.
+4. Leave **Launch GhostMail** selected and choose **Finish**.
+5. Sign in with the initial password `ghost2026`.
+6. Open **API Keys**, add a Resend or ZeptoMail key, and test it before sending.
+
+The installer does not require administrator privileges. GhostMail opens in your default browser and stores its data in `%LOCALAPPDATA%\GhostMail`.
+
+> [!IMPORTANT]
+> Change the initial password before normal use. Create `%LOCALAPPDATA%\GhostMail\.env`, set `APP_PASSWORD` and `FLASK_SECRET_KEY`, then restart GhostMail. See [`.env.example`](.env.example) for the available settings.
+
+> [!NOTE]
+> Locally built installers are unsigned. Windows SmartScreen may display **Windows protected your PC** until release builds are signed with a trusted code-signing certificate.
+
+## Provider setup
+
+GhostMail sends through an account you control:
+
+1. Create an account with [Resend](https://resend.com/) or [ZeptoMail](https://www.zoho.com/zeptomail/).
+2. Verify the sending domain in the provider dashboard.
+3. Generate an API key with permission to send email.
+4. In GhostMail, choose **API Keys**, paste the key for that provider, and choose **Save & Test**.
+5. Use a From address on the verified domain.
+
+API keys and job data remain on the local computer. The application contacts only the selected email provider and the external asset CDNs referenced by the interface.
+
+## Run from source
+
+Requirements:
+
+- Windows 10 or later
+- Python 3.10 or later
+
+```powershell
+git clone https://github.com/sisbarro/ghost.git
+cd ghost
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+py -m pip install -r requirements.txt
+Copy-Item .env.example .env
+py launcher.py
+```
+
+Edit `.env` before normal use. The source version stores its SQLite database in the project directory; packaged builds use `%LOCALAPPDATA%\GhostMail`.
+
+## Build the Windows installer
+
+Run the packaging script from PowerShell:
+
+```powershell
+.\build-installer.ps1
+```
+
+The script installs Python build dependencies, builds `GhostMail.exe` with PyInstaller, installs Inno Setup through `winget` when needed, and creates:
+
+```text
+installer\output\GhostMail-Setup.exe
+```
+
+The build machine needs Python 3, `winget` or Inno Setup 6, and internet access. See [INSTALL.md](INSTALL.md) for additional packaging notes.
+
+## Project structure
+
+```text
+app.py                  Flask application and API routes
+database.py             SQLite persistence layer
+providers.py            Resend and ZeptoMail integrations
+launcher.py             Local server and browser launcher
+runtime_paths.py        Source and packaged data locations
+templates/index.html    Application interface
+static/                 Browser JavaScript and styles
+GhostMail.spec          PyInstaller configuration
+installer/GhostMail.iss Inno Setup configuration
+build-installer.ps1     Reproducible Windows packaging script
+```
+
+## Security and privacy
+
+- Never commit `.env`, API keys, or `ghostmail.db`; these paths are excluded by [`.gitignore`](.gitignore).
+- GhostMail binds only to `127.0.0.1`, so other devices cannot access it directly.
+- Provider credentials are stored locally. Protect the Windows account and use restricted API keys where available.
+- Email recipient data and campaign history may contain personal information. Back up and handle `%LOCALAPPDATA%\GhostMail` accordingly.
+- Use GhostMail only for recipients who have consented to receive your messages and follow applicable anti-spam laws and provider policies.
+
+## License
+
+No open-source license has been granted yet. Unless a license file is added, the source remains all rights reserved by its copyright holder.
