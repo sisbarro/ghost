@@ -28,6 +28,11 @@ from dotenv import load_dotenv
 
 import openpyxl
 import xlrd
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from runtime_paths import DATA_DIR
 from providers import create_provider, EmailProvider, APIError, PROVIDERS, PROVIDER_META
@@ -329,7 +334,7 @@ def _fire_scheduled_job(sj: dict):
             create_job(job_id, scheduled_provider.name, len(recipients), subject_tmpl, from_email_seed, from_name_seed, interval)
             thread = threading.Thread(
                 target=_bulk_send_worker,
-                args=(job_id, recipients, subject_tmpl, html_tmpl, interval, [], from_email_tmpl, from_name_tmpl, frozen_provider_id, frozen_key),
+                args=(job_id, recipients, subject_tmpl, html_tmpl, interval, [], from_email_tmpl, from_name_tmpl, frozen_provider_id, frozen_key, payload.get("pdf_attachment")),
                 name=f"SchedBulk-{job_id}",
             )
             active_threads[job_id] = thread
@@ -498,6 +503,110 @@ def encode_attachments(files) -> list[dict]:
         except Exception as e:
             logger.error(f"Attachment error ({f.filename}): {e}")
     return result
+
+
+class _PdfHtmlParser(HTMLParser):
+    """Convert simple editor HTML into ReportLab paragraph fragments."""
+
+    BLOCK_TAGS = {"p", "div", "li", "h1", "h2", "h3", "blockquote"}
+    INLINE_TAGS = {"b", "strong", "i", "em", "u", "strike", "s", "sub", "sup"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.blocks = []
+        self.parts = []
+        self.alignment = TA_LEFT
+
+    def _flush(self):
+        content = "".join(self.parts).strip()
+        if content:
+            self.blocks.append((content, self.alignment))
+        self.parts = []
+        self.alignment = TA_LEFT
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in self.BLOCK_TAGS:
+            self._flush()
+            attr_map = dict(attrs)
+            styles = _parse_style_attr(attr_map.get("style") or "")
+            self.alignment = {
+                "center": TA_CENTER,
+                "right": TA_RIGHT,
+                "justify": TA_JUSTIFY,
+            }.get(styles.get("text-align", "").lower(), TA_LEFT)
+            if tag == "li":
+                self.parts.append("&bull; ")
+        elif tag == "br":
+            self.parts.append("<br/>")
+        elif tag in self.INLINE_TAGS:
+            normalized = {"strong": "b", "em": "i", "s": "strike"}.get(tag, tag)
+            self.parts.append(f"<{normalized}>")
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in self.BLOCK_TAGS:
+            self._flush()
+        elif tag in self.INLINE_TAGS:
+            normalized = {"strong": "b", "em": "i", "s": "strike"}.get(tag, tag)
+            self.parts.append(f"</{normalized}>")
+
+    def handle_data(self, data):
+        self.parts.append(escape(data))
+
+    def close(self):
+        super().close()
+        self._flush()
+
+
+def render_pdf_attachment(config: dict | None, context: dict) -> dict | None:
+    """Render one recipient's merged PDF attachment as a provider payload."""
+    if not isinstance(config, dict) or not config.get("enabled"):
+        return None
+    html_template = str(config.get("html_content") or "").strip()
+    if not html_template:
+        return None
+
+    filename = process_template(str(config.get("filename") or "document-{{Email}}.pdf"), context).strip()
+    filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", filename).strip(" .") or "document.pdf"
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+
+    parser = _PdfHtmlParser()
+    parser.feed(process_template(html_template, context))
+    parser.close()
+
+    output = BytesIO()
+    document = SimpleDocTemplate(
+        output,
+        pagesize=LETTER,
+        rightMargin=0.75 * inch,
+        leftMargin=0.75 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+        title=filename,
+    )
+    base_style = getSampleStyleSheet()["BodyText"]
+    story = []
+    for content, alignment in parser.blocks:
+        style = ParagraphStyle(
+            "GhostMailPdfBody",
+            parent=base_style,
+            fontName="Helvetica",
+            fontSize=11,
+            leading=15,
+            alignment=alignment,
+            spaceAfter=8,
+        )
+        story.extend((Paragraph(content, style), Spacer(1, 2)))
+    if not story:
+        story.append(Paragraph(" ", base_style))
+    document.build(story)
+    return {
+        "filename": filename,
+        "content": base64.b64encode(output.getvalue()).decode("ascii"),
+        "mimetype": "application/pdf",
+    }
 
 
 def login_required(f):
@@ -1125,6 +1234,15 @@ def send_bulk_route():
     interval_str = str(data.get("interval", DEFAULT_INTERVAL))
     from_email_tmpl = "" if _sender_locked(PROVIDER_NAME) else data.get("from_email_template", "").strip()
     from_name_tmpl = "" if _sender_locked(PROVIDER_NAME) else data.get("from_name_template", "").strip()
+    pdf_attachment = None
+    if data.get("pdf_enabled") == "true":
+        pdf_attachment = {
+            "enabled": True,
+            "filename": data.get("pdf_filename", "document-{{Email}}.pdf").strip(),
+            "html_content": data.get("pdf_html_content", "").strip(),
+        }
+        if not pdf_attachment["html_content"]:
+            return jsonify({"success": False, "error": "PDF content is required when personalized PDF is enabled."}), 400
 
     if not all([recipients_str, subject_tmpl, html_tmpl]):
         return jsonify({"success": False, "error": "Recipients, Subject, and Content are required."}), 400
@@ -1158,7 +1276,7 @@ def send_bulk_route():
         thread = threading.Thread(
             target=_bulk_send_worker,
             args=(job_id, recipients, subject_tmpl, html_tmpl, interval,
-                  common_attachments, from_email_tmpl, from_name_tmpl, frozen_provider_id, frozen_key),
+                common_attachments, from_email_tmpl, from_name_tmpl, frozen_provider_id, frozen_key, pdf_attachment),
             name=f"BulkSend-{job_id}",
         )
         active_threads[job_id] = thread
@@ -1181,6 +1299,7 @@ def send_bulk_route():
 def _bulk_send_worker(
     job_id, recipients, subject_tmpl, html_tmpl, interval,
     attachments, from_email_tmpl, from_name_tmpl, provider_id, provider_key,
+    pdf_attachment=None,
 ):
     """Background worker — sends emails one-by-one with pause/cancel support."""
     logger.info(f"[{job_id}] Worker started ({len(recipients)} recipients)")
@@ -1237,7 +1356,19 @@ def _bulk_send_worker(
             name = ctx.get("Name") or ctx.get("First_Name") or ""
 
             try:
-                worker_provider.send(from_email, from_name, email_addr, name, subj, body, attachments=attachments)
+                recipient_attachments = list(attachments or [])
+                merged_pdf = render_pdf_attachment(pdf_attachment, ctx)
+                if merged_pdf:
+                    recipient_attachments.append(merged_pdf)
+                worker_provider.send(
+                    from_email,
+                    from_name,
+                    email_addr,
+                    name,
+                    subj,
+                    body,
+                    attachments=recipient_attachments,
+                )
                 success += 1
                 logger.debug(f"[{job_id}] ✓ {email_addr}")
             except APIError as e:
@@ -1405,6 +1536,10 @@ def schedule_job_route():
         if not isinstance(payload.get("recipients"), list) or not payload["recipients"]:
             return jsonify({"success": False, "error": "recipients must be a non-empty list."}), 400
         payload["html_content"] = normalize_email_html(payload.get("html_content", ""))
+        pdf_attachment = payload.get("pdf_attachment")
+        if isinstance(pdf_attachment, dict) and pdf_attachment.get("enabled"):
+            if not str(pdf_attachment.get("html_content") or "").strip():
+                return jsonify({"success": False, "error": "PDF content is required when personalized PDF is enabled."}), 400
         if _sender_locked(PROVIDER_NAME):
             payload["from_email_template"] = ""
             payload["from_name_template"] = ""

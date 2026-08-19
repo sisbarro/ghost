@@ -51,6 +51,10 @@ document.addEventListener("DOMContentLoaded", () => {
         bSubject:       $("b-subject"),
         bContent:       $("b-content"),
         bAttachments:   $("b-attachments"),
+        bPdfEnabled:    $("b-pdf-enabled"),
+        bPdfOptions:    $("b-pdf-options"),
+        bPdfFilename:   $("b-pdf-filename"),
+        bPdfContent:    $("b-pdf-content"),
         bInterval:      $("b-interval"),
         intervalDisplay:$("interval-display"),
         btnPreview:     $("btn-preview"),
@@ -191,6 +195,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Interval slider
         el.bInterval?.addEventListener("input", () => {
             el.intervalDisplay.textContent = `${el.bInterval.value}s`;
+        });
+        el.bPdfEnabled?.addEventListener("change", () => {
+            el.bPdfOptions?.classList.toggle("hidden", !el.bPdfEnabled.checked);
         });
 
         // Preview & Send
@@ -570,6 +577,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const subject = el.bSubject?.value.trim();
         const html = getEditorContent('campaign');
         if (!subject || !html) { toast("Fill in Subject and Content.", "error"); return; }
+        const pdfConfig = getPdfAttachmentConfig();
+        if (pdfConfig === false) return;
 
         setLoading(el.btnSendBulk, true, "Starting...");
         el.progressSection?.classList.remove("hidden");
@@ -582,6 +591,11 @@ document.addEventListener("DOMContentLoaded", () => {
         fd.append("interval", el.bInterval?.value || "4");
         fd.append("from_email_template", el.bFromEmail?.value.trim() || "");
         fd.append("from_name_template", el.bFromName?.value.trim() || "");
+        if (pdfConfig) {
+            fd.append("pdf_enabled", "true");
+            fd.append("pdf_filename", pdfConfig.filename);
+            fd.append("pdf_html_content", pdfConfig.html_content);
+        }
 
         const files = el.bAttachments?.files;
         if (files) for (let i = 0; i < files.length; i++) fd.append("attachments", files[i]);
@@ -609,6 +623,17 @@ document.addEventListener("DOMContentLoaded", () => {
             el.progressSection?.classList.add("hidden");
         }
         setLoading(el.btnSendBulk, false, '<i class="fas fa-rocket mr-2"></i>Start Campaign');
+    }
+
+    function getPdfAttachmentConfig() {
+        if (!el.bPdfEnabled?.checked) return null;
+        const filename = el.bPdfFilename?.value.trim();
+        const htmlContent = el.bPdfContent?.value.trim();
+        if (!filename || !htmlContent) {
+            toast("Fill in the PDF filename and content.", "error");
+            return false;
+        }
+        return { enabled: true, filename, html_content: htmlContent };
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -1292,6 +1317,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!subject || !content) { toast("Fill in Subject and Content.", "error"); return; }
         if (!sendAt) { toast("Pick a date/time first.", "error"); return; }
+        const pdfConfig = getPdfAttachmentConfig();
+        if (pdfConfig === false) return;
 
         setLoading(el.btnSchedBulk, true, "Scheduling...");
         try {
@@ -1305,6 +1332,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     interval: parseInt(el.bInterval?.value || "4"),
                     from_email_template: el.bFromEmail?.value.trim() || "",
                     from_name_template: el.bFromName?.value.trim() || "",
+                    pdf_attachment: pdfConfig,
                 },
             });
             if (res.success) {

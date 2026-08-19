@@ -9,6 +9,7 @@ The Windows installer includes Python and all application dependencies. End user
 - Send individual HTML emails with CC, BCC, and attachments
 - Import campaign recipients from CSV, XLS, or XLSX files
 - Personalize and preview bulk messages for up to 1,000 recipients
+- Generate a personalized PDF attachment for every campaign recipient
 - Pause, resume, cancel, and inspect campaign jobs
 - Schedule messages and campaigns for later delivery
 - Store and test Resend and ZeptoMail API keys from the interface
@@ -44,6 +45,18 @@ GhostMail sends through an account you control:
 5. Use a From address on the verified domain.
 
 API keys and job data remain on the local computer. The application contacts only the selected email provider and the external asset CDNs referenced by the interface.
+
+## Personalized PDF mail merge
+
+Campaigns can generate a different PDF attachment for every recipient:
+
+1. Upload a recipient spreadsheet and compose the campaign.
+2. Enable **Personalized PDF attachment**.
+3. Enter a merged filename such as `Invoice-{{Account_Number}}.pdf`.
+4. Enter the PDF document content using the same spreadsheet placeholders, such as `{{First_Name}}` or `{{Balance}}`.
+5. Start or schedule the campaign.
+
+GhostMail merges the current recipient's values, creates the PDF in memory, and attaches it only to that recipient's email. Common uploaded attachments can be used alongside the generated PDF. Basic HTML formatting including headings, paragraphs, bold, italics, underline, lists, line breaks, and text alignment is supported in PDF content.
 
 ## Run from source
 

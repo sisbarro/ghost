@@ -311,6 +311,25 @@
                         </div>
                         <textarea id="b-content" name="html_content" rows="8" placeholder="<p>Dear {{First_Name}},</p>" class="input font-mono text-sm hidden"></textarea>
                     </div>
+                    <div class="border border-surface-4 bg-surface-2 rounded-lg overflow-hidden">
+                        <label class="flex items-center justify-between gap-4 px-4 py-3 cursor-pointer">
+                            <span class="flex items-center gap-2 text-sm font-medium text-gray-200">
+                                <i class="fas fa-file-pdf text-red-400"></i>
+                                Personalized PDF attachment
+                            </span>
+                            <input type="checkbox" id="b-pdf-enabled" class="w-4 h-4 accent-ghost-500">
+                        </label>
+                        <div id="b-pdf-options" class="hidden border-t border-surface-4 px-4 py-4 space-y-4">
+                            <div>
+                                <label for="b-pdf-filename" class="label">PDF Filename *</label>
+                                <input type="text" id="b-pdf-filename" value="document-{% raw %}{{Email}}{% endraw %}.pdf" placeholder="Invoice-{% raw %}{{Account_Number}}{% endraw %}.pdf" class="input">
+                            </div>
+                            <div>
+                                <label for="b-pdf-content" class="label">PDF Content *</label>
+                                <textarea id="b-pdf-content" rows="9" placeholder="<h1>Hello {% raw %}{{First_Name}}{% endraw %}</h1>&#10;<p>Your account number is {% raw %}{{Account_Number}}{% endraw %}.</p>" class="input font-mono text-sm"></textarea>
+                            </div>
+                        </div>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div>
                             <label for="b-attachments" class="label">Common Attachments</label>
