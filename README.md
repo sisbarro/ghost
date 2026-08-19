@@ -19,7 +19,7 @@ The Windows installer includes Python and all application dependencies. End user
 
 ## Install on Windows
 
-1. Sign in to GitHub with access to this repository, then download **[GhostMail-Setup.exe for Windows](https://github.com/sisbarro/ghost/releases/download/v1.1.0/GhostMail-Setup.exe)**.
+1. Sign in to GitHub with access to this repository, then download **[GhostMail-Setup.exe for Windows](https://github.com/sisbarro/ghost/releases/download/v1.2.0/GhostMail-Setup.exe)**.
 2. Double-click the installer.
 3. Keep **Create a desktop shortcut** selected and choose **Install**.
 4. Leave **Launch GhostMail** selected and choose **Finish**.
