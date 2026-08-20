@@ -1,5 +1,5 @@
 #define MyAppName "GhostMail"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.1"
 #define MyAppPublisher "GhostMail"
 #define MyAppExeName "GhostMail.exe"
 

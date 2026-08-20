@@ -19,7 +19,7 @@ The Windows installer includes Python and all application dependencies. End user
 
 ## Install on Windows
 
-1. Sign in to GitHub with access to this repository, then download **[GhostMail-Setup.exe for Windows](https://github.com/sisbarro/ghost/releases/download/v1.2.0/GhostMail-Setup.exe)**.
+1. Sign in to GitHub with access to this repository, then download **[GhostMail-Setup.exe for Windows](https://github.com/sisbarro/ghost/releases/download/v1.2.1/GhostMail-Setup.exe)**.
 2. Double-click the installer.
 3. Keep **Create a desktop shortcut** selected and choose **Install**.
 4. Leave **Launch GhostMail** selected and choose **Finish**.
@@ -38,7 +38,7 @@ This is a Windows `.exe`, not an Android app. If the link opens an Android downl
 
 ## Install on macOS
 
-1. Download `GhostMail.dmg` from the repository's GitHub release assets (or build it — see below).
+1. Download `GhostMail-macOS-Source.zip` from the GitHub release, unzip it on a Mac, and run `./build-macos.sh` to produce `installer/output/GhostMail.dmg` (or build from a clone — see below).
 2. Open the DMG and drag **GhostMail.app** to **Applications**.
 3. First launch: right-click **GhostMail.app** and choose **Open** (unsigned builds require this once), or approve it under **System Settings → Privacy & Security**.
 4. Sign in with the initial password `ghost2026`, then add a provider API key.

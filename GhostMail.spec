@@ -46,7 +46,7 @@ if sys.platform == "darwin":
         icon=None,
         bundle_identifier="com.ghostmail.desktop",
         info_plist={
-            "CFBundleShortVersionString": "1.2.0",
+            "CFBundleShortVersionString": "1.2.1",
             "NSHighResolutionCapable": True,
         },
     )
