@@ -57,6 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
         bPdfOptions:    $("b-pdf-options"),
         bPdfFilename:   $("b-pdf-filename"),
         bPdfContent:    $("b-pdf-content"),
+        bPdfPreview:    $("b-pdf-preview"),
         bInterval:      $("b-interval"),
         intervalDisplay:$("interval-display"),
         btnPreview:     $("btn-preview"),
@@ -210,6 +211,7 @@ document.addEventListener("DOMContentLoaded", () => {
         el.bPdfEnabled?.addEventListener("change", () => {
             el.bPdfOptions?.classList.toggle("hidden", !el.bPdfEnabled.checked);
         });
+        el.bPdfPreview?.addEventListener("click", previewPdf);
 
         // Preview & Send
         el.btnPreview?.addEventListener("click", showPreview);
@@ -650,6 +652,35 @@ document.addEventListener("DOMContentLoaded", () => {
             return false;
         }
         return { enabled: true, filename, html_content: htmlContent };
+    }
+
+    async function previewPdf() {
+        if (!recipients.length) { toast("Upload recipients first.", "error"); return; }
+        const pdfConfig = getPdfAttachmentConfig();
+        if (!pdfConfig) { if (pdfConfig === null) toast("Enable the personalized PDF first.", "error"); return; }
+
+        setLoading(el.bPdfPreview, true, "Rendering...");
+        try {
+            const res = await fetch("/api/preview-pdf", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename: pdfConfig.filename, html_content: pdfConfig.html_content, recipient: recipients[0] }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                toast(data.error || "PDF preview failed.", "error");
+            } else {
+                const merged = res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] || "document.pdf";
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, "_blank");
+                toast(`Previewing ${merged}`, "info", 3000);
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+            }
+        } catch {
+            toast("Network error.", "error");
+        }
+        setLoading(el.bPdfPreview, false, '<i class="fas fa-file-pdf mr-1"></i>Preview PDF');
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -215,7 +215,7 @@
                             <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-ghost-600 text-white text-sm font-bold mr-2">1</span>
                             Upload Recipients
                         </h2>
-                        <p class="text-sm text-gray-400 mt-1 ml-9">Excel (.xlsx/.xls) or text file with one email per line. Excel must have an "Email" column.</p>
+                        <p class="text-sm text-gray-400 mt-1 ml-9">CSV, Excel (.xlsx/.xls), or text file with one email per line. Spreadsheets must have an "Email" column.</p>
                     </div>
                 </div>
 
@@ -226,7 +226,7 @@
                         <span class="text-ghost-400 font-medium">Click to upload</span> or drag &amp; drop
                     </p>
                     <p class="text-xs text-gray-500 mt-1">Max 1,000 recipients</p>
-                    <input type="file" id="file-input" class="hidden" accept=".txt,.xlsx,.xls">
+                    <input type="file" id="file-input" class="hidden" accept=".txt,.csv,.xlsx,.xls">
                 </div>
 
                 <!-- File info bar -->
@@ -322,6 +322,12 @@
                             <div>
                                 <label for="b-pdf-content" class="label">PDF Content *</label>
                                 <textarea id="b-pdf-content" rows="9" placeholder="<h1>Hello {% raw %}{{First_Name}}{% endraw %}</h1>&#10;<p>Your account number is {% raw %}{{Account_Number}}{% endraw %}.</p>" class="input font-mono text-sm"></textarea>
+                            </div>
+                            <div class="flex items-center justify-between gap-3">
+                                <p class="text-xs text-gray-500">Preview renders the PDF with the first uploaded recipient's data.</p>
+                                <button type="button" id="b-pdf-preview" class="btn-secondary text-xs py-1.5 whitespace-nowrap">
+                                    <i class="fas fa-file-pdf mr-1"></i>Preview PDF
+                                </button>
                             </div>
                         </div>
                     </div>

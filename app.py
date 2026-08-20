@@ -9,6 +9,7 @@ rich HTML compose, bulk campaigns, scheduling, and domain awareness.
 import os
 import re
 import sys
+import csv
 import time
 import uuid
 import json
@@ -19,10 +20,10 @@ from html import escape
 from html.parser import HTMLParser
 from collections import Counter, deque
 from functools import wraps
-from io import BytesIO
+from io import BytesIO, StringIO
 from datetime import datetime
 
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -1149,6 +1150,26 @@ def upload_recipients_route():
                 rcpt = {normalize_column(n): vals.get(normalize_column(n), "") for n in raw_headers if n}
                 recipients.append(rcpt)
 
+        elif ext == ".csv":
+            rows_iter = iter(csv.reader(StringIO(content.decode("utf-8-sig", "ignore"))))
+            raw_headers = [str(h or "").strip() for h in next(rows_iter, [])]
+            if not any(i.lower() == "email" for i in raw_headers):
+                return jsonify({"success": False, "error": "Missing 'Email' column."}), 400
+
+            col_map = {i: normalize_column(h) for i, h in enumerate(raw_headers) if h}
+            columns = sorted(set(col_map.values()))
+
+            for row in rows_iter:
+                vals = {col_map[i]: str(row[i] or "").strip() for i in col_map if i < len(row)}
+                email = vals.get("Email", "")
+                if not email or not is_valid_email(email):
+                    invalid_count += 1
+                    continue
+                if len(recipients) >= MAX_RECIPIENTS:
+                    break
+                rcpt = {normalize_column(n): vals.get(normalize_column(n), "") for n in raw_headers if n}
+                recipients.append(rcpt)
+
         elif ext == ".txt":
             columns = ["Email"]
             for line in content.decode("utf-8", "ignore").splitlines():
@@ -1162,7 +1183,7 @@ def upload_recipients_route():
                     break
                 recipients.append({"Email": email})
         else:
-            return jsonify({"success": False, "error": "Unsupported file type. Use .xlsx, .xls, or .txt."}), 400
+            return jsonify({"success": False, "error": "Unsupported file type. Use .csv, .xlsx, .xls, or .txt."}), 400
 
         if not recipients:
             return jsonify({"success": False, "error": "No valid emails found."}), 400
@@ -1219,6 +1240,33 @@ def preview_email_route():
 
 
 # ── Bulk Send ──────────────────────────────────────────────────────
+
+@app.route("/api/preview-pdf", methods=["POST"])
+@login_required
+def preview_pdf_route():
+    """Render the personalized PDF for one recipient and return it inline."""
+    data = request.get_json()
+    config = {
+        "enabled": True,
+        "filename": (data.get("filename") or "document.pdf").strip(),
+        "html_content": (data.get("html_content") or "").strip(),
+    }
+    if not config["html_content"]:
+        return jsonify({"success": False, "error": "PDF content is required."}), 400
+    context = data.get("recipient") if isinstance(data.get("recipient"), dict) else {}
+    try:
+        attachment = render_pdf_attachment(config, context)
+    except Exception as e:
+        logger.error(f"PDF preview error: {e}")
+        return jsonify({"success": False, "error": f"PDF rendering failed: {e}"}), 400
+    if not attachment:
+        return jsonify({"success": False, "error": "Unable to render PDF."}), 400
+    return Response(
+        base64.b64decode(attachment["content"]),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{attachment["filename"]}"'},
+    )
+
 
 @app.route("/api/send-bulk", methods=["POST"])
 @login_required
